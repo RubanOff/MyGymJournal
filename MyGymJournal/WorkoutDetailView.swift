@@ -8,6 +8,11 @@ struct WorkoutDetailView: View {
     @State private var workoutNotes = ""
     @State private var showingTimer = false
     
+    // Состояния для редактирования упражнения
+    @State private var showingEditExerciseAlert = false
+    @State private var editingExercise: Exercise?
+    @State private var editingExerciseName = ""
+    
     var body: some View {
         ZStack {
             // Основной контент
@@ -96,6 +101,18 @@ struct WorkoutDetailView: View {
                     isPresented: $showingAddExerciseAlert,
                     onSave: { name in
                         dataManager.addExercise(to: workout, name: name)
+                    }
+                )
+            }
+        }
+        // Кастомный алерт для редактирования упражнения (НА ВЕРХНЕМ УРОВНЕ)
+        .overlay {
+            if showingEditExerciseAlert, let exercise = editingExercise {
+                EditExerciseAlertView(
+                    isPresented: $showingEditExerciseAlert,
+                    originalName: exercise.name,
+                    onSave: { newName in
+                        updateExerciseName(exercise, newName: newName)
                     }
                 )
             }
@@ -192,6 +209,12 @@ struct WorkoutDetailView: View {
                     dataManager: dataManager,
                     onDelete: {
                         deleteExercise(exercise)
+                    },
+                    onEdit: {
+                        // Передаем упражнение для редактирования на верхний уровень
+                        editingExercise = exercise
+                        editingExerciseName = exercise.name
+                        showingEditExerciseAlert = true
                     }
                 )
             }
@@ -240,6 +263,15 @@ struct WorkoutDetailView: View {
             dataManager.saveData()
         }
     }
+    
+    // Функция обновления названия упражнения
+    private func updateExerciseName(_ exercise: Exercise, newName: String) {
+        if let workoutIndex = dataManager.workouts.firstIndex(where: { $0.id == workout.id }),
+           let exerciseIndex = dataManager.workouts[workoutIndex].exercises.firstIndex(where: { $0.id == exercise.id }) {
+            dataManager.workouts[workoutIndex].exercises[exerciseIndex].name = newName
+            dataManager.saveData()
+        }
+    }
 }
 
 // Карточка упражнения
@@ -249,11 +281,10 @@ struct ExerciseCard: View {
     let workout: Workout
     @ObservedObject var dataManager: DataManager
     let onDelete: () -> Void
+    let onEdit: () -> Void  // Добавляем замыкание для редактирования
     
     @State private var isExpanded = true
     @State private var showingAddSet = false
-    @State private var showingEditAlert = false
-    @State private var editedExerciseName = ""
     
     var body: some View {
         VStack(spacing: 0) {
@@ -306,11 +337,7 @@ struct ExerciseCard: View {
                         // Кнопка меню (три точки)
                         Menu {
                             // Кнопка редактирования названия
-                            Button(action: {
-                                editedExerciseName = exercise.name
-                                showingEditAlert = true
-                                print("🎯 Нажали редактировать, showingEditAlert = true")
-                            }) {
+                            Button(action: onEdit) {  // Вызываем замыкание
                                 Label("Редактировать", systemImage: "pencil")
                             }
                             
@@ -389,27 +416,6 @@ struct ExerciseCard: View {
         }
         .sheet(isPresented: $showingAddSet) {
             AddSetView(exercise: exercise, workout: workout, dataManager: dataManager)
-        }
-        // ВАЖНО: Добавляем overlay для алерта редактирования
-        .overlay {
-            if showingEditAlert {
-                EditExerciseAlertView(
-                    isPresented: $showingEditAlert,
-                    originalName: exercise.name,
-                    onSave: { newName in
-                        updateExerciseName(newName)
-                    }
-                )
-            }
-        }
-    }
-    
-    // Функция обновления названия упражнения
-    private func updateExerciseName(_ newName: String) {
-        if let workoutIndex = dataManager.workouts.firstIndex(where: { $0.id == workout.id }),
-           let exerciseIndex = dataManager.workouts[workoutIndex].exercises.firstIndex(where: { $0.id == exercise.id }) {
-            dataManager.workouts[workoutIndex].exercises[exerciseIndex].name = newName
-            dataManager.saveData()
         }
     }
     
