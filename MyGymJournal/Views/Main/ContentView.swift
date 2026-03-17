@@ -12,6 +12,10 @@ struct ContentView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
     
+    // Состояния для редактирования тренировки
+    @State private var showingEditAlert = false
+    @State private var editingWorkout: Workout?
+    
     // Форматтер для месяца
     private let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -108,6 +112,10 @@ struct ContentView: View {
                     WorkoutListView(
                         workouts: workoutsForSelectedDay,
                         dataManager: dataManager,
+                        onEdit: { workout in
+                            editingWorkout = workout
+                            showingEditAlert = true
+                        },
                         deleteWorkout: deleteWorkout
                     )
                 }
@@ -121,13 +129,25 @@ struct ContentView: View {
                     }
                 }
             }
-            // Кастомный алерт
+            // Кастомный алерт для добавления
             .overlay {
                 if showingCustomAlert {
                     CustomAlertView(
                         isPresented: $showingCustomAlert,
                         onSave: { name in
                             dataManager.addWorkout(name: name)
+                        }
+                    )
+                }
+            }
+            // Кастомный алерт для редактирования
+            .overlay {
+                if showingEditAlert, let workout = editingWorkout {
+                    EditWorkoutAlertView(
+                        isPresented: $showingEditAlert,
+                        originalName: workout.name,
+                        onSave: { newName in
+                            updateWorkoutName(workout, newName: newName)
                         }
                     )
                 }
@@ -150,6 +170,21 @@ struct ContentView: View {
         }
     }
 }
+
+// Список тренировок
+struct WorkoutListView: View {
+    let workouts: [Workout]
+    let dataManager: DataManager
+    let deleteWorkout: (Workout) -> Void
+    
+    private func updateWorkoutName(_ workout: Workout, newName: String) {
+        if let index = dataManager.workouts.firstIndex(where: { $0.id == workout.id }) {
+            dataManager.workouts[index].name = newName
+            dataManager.saveData()
+        }
+    }
+}
+
 
 
 // Карусель с эффектом барабана
@@ -360,6 +395,7 @@ struct EmptyStateView: View {
 struct WorkoutListView: View {
     let workouts: [Workout]
     let dataManager: DataManager
+    let onEdit: (Workout) -> Void
     let deleteWorkout: (Workout) -> Void
     
     var body: some View {
@@ -402,7 +438,7 @@ struct WorkoutListView: View {
                                     .background(Color.green.opacity(0.2))
                                     .cornerRadius(8)
                             } else {
-                                // Невидимый заполнитель для баланса, если заметки нет
+                                // Невидимый заполнитель для баланса
                                 Color.clear
                                     .frame(width: 1, height: 1)
                             }
@@ -411,10 +447,18 @@ struct WorkoutListView: View {
                     .padding(.vertical, 4)
                 }
                 .contextMenu {
+                    // Кнопка редактирования
+                    Button(action: {
+                        onEdit(workout)
+                    }) {
+                        Label("Редактировать", systemImage: "pencil")
+                    }
+                    
+                    // Кнопка удаления
                     Button(role: .destructive) {
                         deleteWorkout(workout)
                     } label: {
-                        Label("Удалить тренировку", systemImage: "trash")
+                        Label("Удалить", systemImage: "trash")
                     }
                 }
             }

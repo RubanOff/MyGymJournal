@@ -16,7 +16,6 @@ struct WorkoutDetailView: View {
     var body: some View {
         ZStack {
             //
-            //
             // Основной контент
             ScrollView {
                 VStack(spacing: 20) {

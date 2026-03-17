@@ -152,10 +152,10 @@ struct CustomAlertView: View {
     private var customTextField: some View {
         TextField("", text: $workoutName)
             .focused($isTextFieldFocused)
-            .placeholder(when: workoutName.isEmpty) {
-                Text("Например: Грудь + бицепс")
-                    .foregroundColor(.gray.opacity(0.6))
-            }
+            .modifier(PlaceholderModifier(
+                showPlaceholder: workoutName.isEmpty,
+                placeholder: "Например: Грудь + бицепс"
+            ))
             .padding()
             .background(textFieldBackground)
             .foregroundColor(.white)
@@ -265,16 +265,3 @@ struct CustomAlertView: View {
     }
 }
 
-// Расширение для placeholder в TextField
-extension View {
-    func placeholder<Content: View>(
-        when shouldShow: Bool,
-        alignment: Alignment = .leading,
-        @ViewBuilder placeholder: () -> Content
-    ) -> some View {
-        ZStack(alignment: alignment) {
-            placeholder().opacity(shouldShow ? 1 : 0)
-            self
-        }
-    }
-}

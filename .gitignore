@@ -1,0 +1,30 @@
+# Secrets
+Secrets.swift
+Config.xcconfig
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.moved-aside
+*.xcbkptlist
+*.xcscmblueprint
+
+# Build
+build/
+*.app
+*.ipa
+*.dSYM.zip
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Duplicate files (чтобы не добавить их случайно)
+Views/
+**/Views/
+**/App/
+**/Helpers/
