@@ -1,5 +1,24 @@
 import SwiftUI
 
+// Добавляем структуру WaveShape для фона
+struct WaveShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: rect.maxY))
+        
+        path.addCurve(
+            to: CGPoint(x: rect.maxX, y: rect.midY),
+            control1: CGPoint(x: rect.width * 0.25, y: rect.maxY - 50),
+            control2: CGPoint(x: rect.width * 0.75, y: rect.midY - 30)
+        )
+        
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        
+        return path
+    }
+}
+
 struct ContentView: View {
     @StateObject private var dataManager = DataManager()
     @State private var showingCustomAlert = false
@@ -164,11 +183,6 @@ struct ContentView: View {
                         EmptyStateView()
                     } else {
                         VStack(spacing: 0) {
-                            // Плашка с итогами дня
-                            summaryCardSection
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                            
                             // Список тренировок
                             WorkoutListView(
                                 workouts: workoutsForSelectedDay,
@@ -203,6 +217,54 @@ struct ContentView: View {
             }
             .navigationTitle("Мои тренировки")
             .navigationBarTitleDisplayMode(.inline)
+            // 🔥 НОВЫЙ ФОН - как в Telegram (Вариант 5)
+            .background(
+                ZStack {
+                    // Основной цвет
+                    Color(.systemGray6)
+                    
+                    // Мягкие волны
+                    WaveShape()
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue.opacity(0.15), .purple.opacity(0.15)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(height: 300)
+                        .offset(y: 250)
+                        .blur(radius: 20)
+                    
+                    // Ещё одна волна
+                    WaveShape()
+                        .fill(
+                            LinearGradient(
+                                colors: [.purple.opacity(0.15), .blue.opacity(0.1)],
+                                startPoint: .topTrailing,
+                                endPoint: .bottomLeading
+                            )
+                        )
+                        .frame(height: 400)
+                        .offset(y: 150)
+                        .rotationEffect(.degrees(180))
+                        .blur(radius: 25)
+                    
+                    // Третья маленькая волна для глубины
+                    WaveShape()
+                        .fill(
+                            LinearGradient(
+                                colors: [.orange.opacity(0.1), .pink.opacity(0.1)],
+                                startPoint: .bottomLeading,
+                                endPoint: .topTrailing
+                            )
+                        )
+                        .frame(height: 200)
+                        .offset(y: 50)
+                        .blur(radius: 30)
+                }
+                .ignoresSafeArea()
+            )
             .toolbar {
                 // Левая кнопка - чат
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -232,7 +294,7 @@ struct ContentView: View {
                     CustomAlertView(
                         isPresented: $showingCustomAlert,
                         onSave: { name in
-                            dataManager.addWorkout(name: name)
+                            dataManager.addWorkout(name: name, date: selectedDate)
                         }
                     )
                 }
@@ -249,172 +311,11 @@ struct ContentView: View {
                     )
                 }
             }
-            // 👇 ДОБАВЬ ЭТОТ КОД 👇
+            // Чат
             .sheet(isPresented: $showingChat) {
                 ChatView(dataManager: dataManager)
             }
         }
-    }
-    
-    // Карточка с итогами дня
-    private var summaryCardSection: some View {
-        VStack(spacing: 16) {
-            // Основная информация
-            HStack {
-                // Иконка-штанга слева
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 56, height: 56)
-                        .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 2)
-                    
-                    Image(systemName: "dumbbell.fill")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Сегодняшние итоги")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(totalWorkoutsForDay)")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        
-                        Text(wordEnding(count: totalWorkoutsForDay, words: ["тренировка", "тренировки", "тренировок"]))
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                }
-                
-                Spacer()
-                
-                // Статистика справа
-                VStack(alignment: .trailing, spacing: 6) {
-                    Text("упражнений")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text("\(totalExercisesForDay)")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.blue)
-                        
-                        Image(systemName: "figure.strengthtraining.traditional")
-                            .font(.caption)
-                            .foregroundColor(.blue.opacity(0.7))
-                    }
-                }
-            }
-            
-            Divider()
-                .background(Color.gray.opacity(0.3))
-            
-            // Детальная статистика
-            HStack {
-                // Подходы
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.green.opacity(0.1))
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.subheadline)
-                            .foregroundColor(.green)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(totalSetsForDay)")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text("подходов")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                    }
-                }
-                
-                Spacer()
-                
-                // Повторения
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.orange.opacity(0.1))
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: "repeat")
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(totalRepsForDay)")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text("повторений")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                    }
-                }
-                
-                Spacer()
-                
-                // Общий вес (если есть)
-                if totalWeightForDay > 0 {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.purple.opacity(0.1))
-                                .frame(width: 36, height: 36)
-                            
-                            Image(systemName: "scalemass")
-                                .font(.subheadline)
-                                .foregroundColor(.purple)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(totalWeightForDay)")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                            
-                            Text("кг")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color(.systemGray6))
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(
-                            LinearGradient(
-                                colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
-        )
     }
     
     // Подсчет общего веса за день

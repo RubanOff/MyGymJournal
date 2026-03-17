@@ -7,14 +7,15 @@ struct ExerciseCard: View {
     @ObservedObject var dataManager: DataManager
     let onDelete: () -> Void
     let onEdit: () -> Void
+    let onDeleteSet: (WorkoutSet, Exercise) -> Void  // 👈 НОВОЕ ЗАМЫКАНИЕ
     
-    // Меняем на false, чтобы упражнения были свернуты
     @State private var isExpanded = false
     @State private var showingAddSet = false
+    @State private var showingDeleteConfirmation = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Заголовок упражнения (всегда видимый)
+            // Заголовок упражнения
             Button(action: {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     isExpanded.toggle()
@@ -23,16 +24,9 @@ struct ExerciseCard: View {
                 HStack {
                     // Номер и название
                     HStack(spacing: 12) {
-                        // Номер в градиентном кружке
                         ZStack {
                             Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: isExpanded ? [.blue, .purple] : [.gray.opacity(0.5), .gray.opacity(0.3)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                                .fill(Color.gray.opacity(0.3))
                                 .frame(width: 32, height: 32)
                             
                             Text("\(exerciseIndex + 1)")
@@ -43,47 +37,84 @@ struct ExerciseCard: View {
                         
                         Text(exercise.name)
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
                     }
                     
                     Spacer()
                     
                     // Статистика и кнопки
                     HStack(spacing: 12) {
-                        // Количество подходов
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.caption)
-                                .foregroundColor(.green)
+                                .foregroundColor(.white.opacity(0.8))
                             Text("\(exercise.sets.count)")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.8))
                         }
                         
-                        // Кнопка добавления подхода
                         Button(action: { showingAddSet = true }) {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(.white)
                                 .font(.title3)
                         }
                         
-                        // Иконка раскрытия/сворачивания
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.white.opacity(0.8))
                             .frame(width: 20)
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray5))
+                .padding(.vertical, 14)
+                .background(Color(.systemGray3))
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            .contextMenu {
+                Button(action: onEdit) {
+                    Label("Редактировать", systemImage: "pencil")
+                }
+                
+                Button(action: duplicateExercise) {
+                    Label("Дублировать", systemImage: "doc.on.doc")
+                }
+                
+                Divider()
+                
+                Button(role: .destructive) {
+                    showingDeleteConfirmation = true
+                } label: {
+                    Label("Удалить", systemImage: "trash")
+                }
+            }
+            .overlay {
+                if showingDeleteConfirmation {
+                    DeleteConfirmationView(
+                        isPresented: $showingDeleteConfirmation,
+                        itemName: exercise.name,
+                        itemType: "упражнение",
+                        onDelete: {
+                            onDelete()
+                            showingDeleteConfirmation = false
+                        }
+                    )
+                }
+            }
             
-            // Список подходов (раскрывающийся)
+            // Список подходов
             if isExpanded {
                 if !exercise.sets.isEmpty {
                     VStack(spacing: 8) {
@@ -93,7 +124,10 @@ struct ExerciseCard: View {
                                 setIndex: setIndex,
                                 exercise: exercise,
                                 workout: workout,
-                                dataManager: dataManager
+                                dataManager: dataManager,
+                                onDelete: {  // 👈 ПЕРЕДАЁМ ЗАМЫКАНИЕ
+                                    onDeleteSet(set, exercise)
+                                }
                             )
                         }
                     }
@@ -102,7 +136,6 @@ struct ExerciseCard: View {
                     .padding(.bottom, 12)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
-                    // Пустое состояние (нет подходов)
                     HStack {
                         Text("Нет подходов")
                             .font(.caption)
@@ -130,25 +163,8 @@ struct ExerciseCard: View {
         .sheet(isPresented: $showingAddSet) {
             AddSetView(exercise: exercise, workout: workout, dataManager: dataManager)
         }
-        // Контекстное меню при долгом нажатии на заголовок
-        .contextMenu {
-            Button(action: onEdit) {
-                Label("Редактировать", systemImage: "pencil")
-            }
-            
-            Button(action: duplicateExercise) {
-                Label("Дублировать", systemImage: "doc.on.doc")
-            }
-            
-            Divider()
-            
-            Button(role: .destructive, action: onDelete) {
-                Label("Удалить", systemImage: "trash")
-            }
-        }
     }
     
-    // Функция дублирования упражнения
     private func duplicateExercise() {
         if let workoutIndex = dataManager.workouts.firstIndex(where: { $0.id == workout.id }),
            let exerciseIndex = dataManager.workouts[workoutIndex].exercises.firstIndex(where: { $0.id == exercise.id }) {

@@ -24,12 +24,12 @@ class DataManager: ObservableObject {
         }
     }
     
-    // Добавление новой тренировки с названием
-    func addWorkout(name: String) {
+    // Добавление новой тренировки с названием и ДАТОЙ
+    func addWorkout(name: String, date: Date) {  // 👈 Добавили параметр date
         let newWorkout = Workout(
             id: UUID(),
             name: name,
-            date: Date(),
+            date: date,  // 👈 Используем переданную дату
             exercises: [],
             notes: ""
         )

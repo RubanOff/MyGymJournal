@@ -6,6 +6,15 @@ struct SetRow: View {
     let exercise: Exercise
     let workout: Workout
     @ObservedObject var dataManager: DataManager
+    let onDelete: () -> Void  // 👈 Замыкание для удаления
+    
+    private func formattedWeight() -> String {
+        if set.weight.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(format: "%.0f", set.weight)
+        } else {
+            return String(format: "%.1f", set.weight)
+        }
+    }
     
     var body: some View {
         HStack {
@@ -14,19 +23,11 @@ struct SetRow: View {
                 .foregroundColor(.gray)
                 .frame(width: 24)
             
-            Button(action: {
-                dataManager.toggleSet(set, in: exercise, workout: workout)
-            }) {
-                Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(set.isCompleted ? .green : .gray)
-                    .font(.title3)
-            }
-            
             HStack(spacing: 4) {
-                Text("\(String(format: "%.1f", set.weight))")
+                Text(formattedWeight())
                     .font(.body)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.white)
                 
                 Text("кг")
                     .font(.caption)
@@ -39,20 +40,18 @@ struct SetRow: View {
                 Text("\(set.repetitions)")
                     .font(.body)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.white)
                 
                 Text("раз")
                     .font(.caption)
                     .foregroundColor(.gray)
             }
-            .strikethrough(set.isCompleted)
-            .opacity(set.isCompleted ? 0.7 : 1)
             
             Spacer()
             
             Menu {
                 Button(role: .destructive) {
-                    deleteSet()
+                    onDelete()  // 👈 Вызываем замыкание
                 } label: {
                     Label("Удалить подход", systemImage: "trash")
                 }
@@ -69,18 +68,18 @@ struct SetRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(
+        .background(Color(.systemGray5).opacity(0.15))
+        .cornerRadius(12)
+        .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemGray6))
+                .stroke(
+                    LinearGradient(
+                        colors: [.blue.opacity(0.2), .purple.opacity(0.2)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
         )
-    }
-    
-    private func deleteSet() {
-        if let workoutIndex = dataManager.workouts.firstIndex(where: { $0.id == workout.id }),
-           let exerciseIndex = dataManager.workouts[workoutIndex].exercises.firstIndex(where: { $0.id == exercise.id }),
-           let setIndex = dataManager.workouts[workoutIndex].exercises[exerciseIndex].sets.firstIndex(where: { $0.id == set.id }) {
-            dataManager.workouts[workoutIndex].exercises[exerciseIndex].sets.remove(at: setIndex)
-            dataManager.saveData()
-        }
     }
 }

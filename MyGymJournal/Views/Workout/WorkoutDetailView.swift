@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Убираем повторное объявление WaveShape, так как оно уже есть в ContentView.swift
+
 struct WorkoutDetailView: View {
     let workout: Workout
     @ObservedObject var dataManager: DataManager
@@ -13,35 +15,77 @@ struct WorkoutDetailView: View {
     @State private var editingExercise: Exercise?
     @State private var editingExerciseName = ""
     
+    // Состояния для удаления подхода
+    @State private var showingDeleteSetAlert = false
+    @State private var setToDelete: (set: WorkoutSet, exercise: Exercise)?
+    
     var body: some View {
         ZStack {
-            //
+            // 🔥 ФОН - как в Telegram (используем WaveShape из ContentView)
+            ZStack {
+                // Основной цвет
+                Color(.systemGray6)
+                
+                // Мягкие волны
+                WaveShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [.blue.opacity(0.15), .purple.opacity(0.15)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 300)
+                    .offset(y: 250)
+                    .blur(radius: 20)
+                
+                // Ещё одна волна
+                WaveShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [.purple.opacity(0.15), .blue.opacity(0.1)],
+                            startPoint: .topTrailing,
+                            endPoint: .bottomLeading
+                        )
+                    )
+                    .frame(height: 400)
+                    .offset(y: 150)
+                    .rotationEffect(.degrees(180))
+                    .blur(radius: 25)
+                
+                // Третья маленькая волна для глубины
+                WaveShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [.orange.opacity(0.1), .pink.opacity(0.1)],
+                            startPoint: .bottomLeading,
+                            endPoint: .topTrailing
+                        )
+                    )
+                    .frame(height: 200)
+                    .offset(y: 50)
+                    .blur(radius: 30)
+            }
+            .ignoresSafeArea()
+            
             // Основной контент
             ScrollView {
                 VStack(spacing: 20) {
                     // Шапка тренировки
                     workoutHeader
+                        .padding(.horizontal, 16)
                     
                     // Список упражнений
                     exercisesList
+                        .padding(.horizontal, 16)
                     
                     // Кнопка добавления упражнения
                     addExerciseButton
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 20)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.top, 16)
             }
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color(.systemGray6).opacity(0.9),
-                        Color(.systemGray5).opacity(0.95)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-            )
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -106,7 +150,7 @@ struct WorkoutDetailView: View {
                 )
             }
         }
-        // Кастомный алерт для редактирования упражнения (НА ВЕРХНЕМ УРОВНЕ)
+        // Кастомный алерт для редактирования упражнения
         .overlay {
             if showingEditExerciseAlert, let exercise = editingExercise {
                 EditExerciseAlertView(
@@ -114,6 +158,20 @@ struct WorkoutDetailView: View {
                     originalName: exercise.name,
                     onSave: { newName in
                         updateExerciseName(exercise, newName: newName)
+                    }
+                )
+            }
+        }
+        // 👇 НОВЫЙ АЛЕРТ ДЛЯ УДАЛЕНИЯ ПОДХОДА
+        .overlay {
+            if showingDeleteSetAlert, let setToDelete = setToDelete {
+                DeleteConfirmationView(
+                    isPresented: $showingDeleteSetAlert,
+                    itemName: "Подход \(getSetIndex(for: setToDelete.set, in: setToDelete.exercise) + 1)",
+                    itemType: "подход",
+                    onDelete: {
+                        deleteSet()
+                        showingDeleteSetAlert = false
                     }
                 )
             }
@@ -164,7 +222,12 @@ struct WorkoutDetailView: View {
             }
             .padding(.top, 8)
         }
-        .padding(.bottom, 8)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(.systemGray6).opacity(0.8))
+                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+        )
     }
     
     // Форматированная дата
@@ -212,10 +275,13 @@ struct WorkoutDetailView: View {
                         deleteExercise(exercise)
                     },
                     onEdit: {
-                        // Передаем упражнение для редактирования на верхний уровень
                         editingExercise = exercise
                         editingExerciseName = exercise.name
                         showingEditExerciseAlert = true
+                    },
+                    onDeleteSet: { set, exercise in  // 👈 НОВОЕ ЗАМЫКАНИЕ
+                        setToDelete = (set, exercise)
+                        showingDeleteSetAlert = true
                     }
                 )
             }
@@ -243,7 +309,6 @@ struct WorkoutDetailView: View {
                     )
             )
         }
-        .padding(.top, 8)
     }
     
     // Подсчет общего количества подходов
@@ -272,5 +337,22 @@ struct WorkoutDetailView: View {
             dataManager.workouts[workoutIndex].exercises[exerciseIndex].name = newName
             dataManager.saveData()
         }
+    }
+    
+    private func deleteSet() {
+        guard let (set, exercise) = setToDelete else { return }
+        
+        if let workoutIndex = dataManager.workouts.firstIndex(where: { $0.id == workout.id }),
+           let exerciseIndex = dataManager.workouts[workoutIndex].exercises.firstIndex(where: { $0.id == exercise.id }),
+           let setIndex = dataManager.workouts[workoutIndex].exercises[exerciseIndex].sets.firstIndex(where: { $0.id == set.id }) {
+            dataManager.workouts[workoutIndex].exercises[exerciseIndex].sets.remove(at: setIndex)
+            dataManager.saveData()
+            setToDelete = nil
+        }
+    }
+    
+    // Вспомогательная функция для получения индекса подхода
+    private func getSetIndex(for set: WorkoutSet, in exercise: Exercise) -> Int {
+        return exercise.sets.firstIndex(where: { $0.id == set.id }) ?? 0
     }
 }
