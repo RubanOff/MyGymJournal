@@ -23,10 +23,8 @@ build/
 *.swp
 *~
 
-# Duplicate files (чтобы не добавить их случайно)
+# Duplicate paths (чтобы не добавить случайные копии)
 Views/
 **/Views/
 **/App/
 **/Helpers/
-Config.xcconfig
-Secrets.swift
