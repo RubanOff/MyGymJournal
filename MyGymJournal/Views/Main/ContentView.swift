@@ -1,9 +1,5 @@
 import SwiftUI
 
-enum DragDirection {
-    case none, left, right
-}
-
 struct ContentView: View {
     @StateObject private var dataManager = DataManager()
     @State private var showingCustomAlert = false
@@ -11,6 +7,9 @@ struct ContentView: View {
     @State private var currentWeekOffset = 0
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
+    
+    // Состояние для чата
+    @State private var showingChat = false
     
     // Состояния для редактирования тренировки
     @State private var showingEditAlert = false
@@ -60,12 +59,66 @@ struct ContentView: View {
         }
     }
     
+    // Функция для перехода к следующему дню
+    private func goToNextDay() {
+        let calendar = Calendar.current
+        if let nextDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedDate = nextDate
+                
+                // Проверяем, нужно ли обновить неделю
+                if !weekDays.contains(where: { calendar.isDate($0, inSameDayAs: nextDate) }) {
+                    if nextDate > weekDays.last ?? Date() {
+                        currentWeekOffset += 1
+                    }
+                }
+            }
+        }
+    }
+    
+    // Функция для перехода к предыдущему дню
+    private func goToPreviousDay() {
+        let calendar = Calendar.current
+        if let previousDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedDate = previousDate
+                
+                // Проверяем, нужно ли обновить неделю
+                if !weekDays.contains(where: { calendar.isDate($0, inSameDayAs: previousDate) }) {
+                    if previousDate < weekDays.first ?? Date() {
+                        currentWeekOffset -= 1
+                    }
+                }
+            }
+        }
+    }
+    
     // Тренировки для выбранного дня
     var workoutsForSelectedDay: [Workout] {
         let calendar = Calendar.current
         return dataManager.workouts.filter { workout in
             calendar.isDate(workout.date, inSameDayAs: selectedDate)
         }
+    }
+    
+    // Подсчет общего количества тренировок за день
+    private var totalWorkoutsForDay: Int {
+        workoutsForSelectedDay.count
+    }
+    
+    // Подсчет общего количества упражнений за день
+    private var totalExercisesForDay: Int {
+        workoutsForSelectedDay.reduce(0) { $0 + $1.exercises.count }
+    }
+    
+    // Подсчет общего количества подходов за день
+    private var totalSetsForDay: Int {
+        workoutsForSelectedDay.reduce(0) { $0 + $1.exercises.reduce(0) { $0 + $1.sets.count } }
+    }
+    
+    // Подсчет общего количества повторений за день
+    private var totalRepsForDay: Int {
+        workoutsForSelectedDay.reduce(0) { $0 + $1.exercises.reduce(0) { $0 + $1.sets.reduce(0) { $0 + $1.repetitions } } }
     }
     
     var body: some View {
@@ -105,24 +158,68 @@ struct ContentView: View {
                     .background(Color.gray.opacity(0.3))
                     .padding(.top, 8)
                 
-                // Список тренировок для выбранного дня
-                if workoutsForSelectedDay.isEmpty {
-                    EmptyStateView()
-                } else {
-                    WorkoutListView(
-                        workouts: workoutsForSelectedDay,
-                        dataManager: dataManager,
-                        onEdit: { workout in
-                            editingWorkout = workout
-                            showingEditAlert = true
-                        },
-                        deleteWorkout: deleteWorkout
-                    )
+                // Основной контент с поддержкой свайпов
+                ZStack {
+                    if workoutsForSelectedDay.isEmpty {
+                        EmptyStateView()
+                    } else {
+                        VStack(spacing: 0) {
+                            // Плашка с итогами дня
+                            summaryCardSection
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                            
+                            // Список тренировок
+                            WorkoutListView(
+                                workouts: workoutsForSelectedDay,
+                                dataManager: dataManager,
+                                onEdit: { workout in
+                                    editingWorkout = workout
+                                    showingEditAlert = true
+                                },
+                                deleteWorkout: deleteWorkout
+                            )
+                        }
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .gesture(
+                    DragGesture(minimumDistance: 20)
+                        .onEnded { value in
+                            let horizontalAmount = value.translation.width
+                            let verticalAmount = value.translation.height
+                            
+                            if abs(horizontalAmount) > abs(verticalAmount) {
+                                if horizontalAmount < -50 {
+                                    // Свайп влево - следующий день
+                                    goToNextDay()
+                                } else if horizontalAmount > 50 {
+                                    // Свайп вправо - предыдущий день
+                                    goToPreviousDay()
+                                }
+                            }
+                        }
+                )
             }
             .navigationTitle("Мои тренировки")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Левая кнопка - чат
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { showingChat = true }) {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(colors: [.blue, .purple],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing))
+                                .frame(width: 36, height: 36)
+                            
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingCustomAlert = true }) {
                         Image(systemName: "plus")
@@ -152,6 +249,191 @@ struct ContentView: View {
                     )
                 }
             }
+            // 👇 ДОБАВЬ ЭТОТ КОД 👇
+            .sheet(isPresented: $showingChat) {
+                ChatView(dataManager: dataManager)
+            }
+        }
+    }
+    
+    // Карточка с итогами дня
+    private var summaryCardSection: some View {
+        VStack(spacing: 16) {
+            // Основная информация
+            HStack {
+                // Иконка-штанга слева
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 56, height: 56)
+                        .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 2)
+                    
+                    Image(systemName: "dumbbell.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Сегодняшние итоги")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(totalWorkoutsForDay)")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text(wordEnding(count: totalWorkoutsForDay, words: ["тренировка", "тренировки", "тренировок"]))
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Spacer()
+                
+                // Статистика справа
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text("упражнений")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text("\(totalExercisesForDay)")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                        
+                        Image(systemName: "figure.strengthtraining.traditional")
+                            .font(.caption)
+                            .foregroundColor(.blue.opacity(0.7))
+                    }
+                }
+            }
+            
+            Divider()
+                .background(Color.gray.opacity(0.3))
+            
+            // Детальная статистика
+            HStack {
+                // Подходы
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.green.opacity(0.1))
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.subheadline)
+                            .foregroundColor(.green)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(totalSetsForDay)")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        Text("подходов")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Spacer()
+                
+                // Повторения
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange.opacity(0.1))
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: "repeat")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(totalRepsForDay)")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        Text("повторений")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Spacer()
+                
+                // Общий вес (если есть)
+                if totalWeightForDay > 0 {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.purple.opacity(0.1))
+                                .frame(width: 36, height: 36)
+                            
+                            Image(systemName: "scalemass")
+                                .font(.subheadline)
+                                .foregroundColor(.purple)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(totalWeightForDay)")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            
+                            Text("кг")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(.systemGray6))
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+    }
+    
+    // Подсчет общего веса за день
+    private var totalWeightForDay: Int {
+        let total = workoutsForSelectedDay.reduce(0) { $0 + $1.exercises.reduce(0) { $0 + $1.sets.reduce(0) { $0 + $1.weight * Double($1.repetitions) } } }
+        return Int(total)
+    }
+    
+    // Функция для склонения слов
+    private func wordEnding(count: Int, words: [String]) -> String {
+        let preLastDigit = count % 100 / 10
+        if preLastDigit == 1 {
+            return words[2]
+        }
+        
+        switch count % 10 {
+        case 1: return words[0]
+        case 2...4: return words[1]
+        default: return words[2]
         }
     }
     
@@ -169,300 +451,11 @@ struct ContentView: View {
             dataManager.saveData()
         }
     }
-}
-
-// Список тренировок
-struct WorkoutListView: View {
-    let workouts: [Workout]
-    let dataManager: DataManager
-    let deleteWorkout: (Workout) -> Void
     
     private func updateWorkoutName(_ workout: Workout, newName: String) {
         if let index = dataManager.workouts.firstIndex(where: { $0.id == workout.id }) {
             dataManager.workouts[index].name = newName
             dataManager.saveData()
         }
-    }
-}
-
-
-
-// Карусель с эффектом барабана
-struct WeekCarouselView: View {
-    let currentWeekDays: [Date]
-    let nextWeekDays: [Date]
-    let previousWeekDays: [Date]
-    @Binding var selectedDate: Date
-    let hasWorkout: (Date) -> Bool
-    @Binding var dragOffset: CGFloat
-    @Binding var isDragging: Bool
-    let onSwipeComplete: (DragDirection) -> Void
-    
-    @State private var dragDirection: DragDirection = .none
-    
-    var body: some View {
-        GeometryReader { geometry in
-            let dayWidth = geometry.size.width / 7
-            
-            ZStack {
-                // Предыдущая неделя (слева)
-                if dragOffset > 0 {
-                    WeekRowView(
-                        weekDays: previousWeekDays,
-                        selectedDate: $selectedDate,
-                        hasWorkout: hasWorkout,
-                        dayWidth: dayWidth,
-                        offset: dragOffset - geometry.size.width
-                    )
-                }
-                
-                // Текущая неделя (центр)
-                WeekRowView(
-                    weekDays: currentWeekDays,
-                    selectedDate: $selectedDate,
-                    hasWorkout: hasWorkout,
-                    dayWidth: dayWidth,
-                    offset: dragOffset
-                )
-                .zIndex(1)
-                
-                // Следующая неделя (справа)
-                if dragOffset < 0 {
-                    WeekRowView(
-                        weekDays: nextWeekDays,
-                        selectedDate: $selectedDate,
-                        hasWorkout: hasWorkout,
-                        dayWidth: dayWidth,
-                        offset: dragOffset + geometry.size.width
-                    )
-                }
-            }
-            .frame(width: geometry.size.width, height: 80)
-            .gesture(
-                DragGesture(minimumDistance: 5)
-                    .onChanged { value in
-                        withAnimation(.interactiveSpring()) {
-                            dragOffset = value.translation.width
-                            isDragging = true
-                            
-                            if value.translation.width > 0 {
-                                dragDirection = .right
-                            } else if value.translation.width < 0 {
-                                dragDirection = .left
-                            }
-                        }
-                    }
-                    .onEnded { value in
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            let threshold = geometry.size.width / 3
-                            
-                            if value.translation.width < -threshold {
-                                // Свайп влево - следующая неделя
-                                dragOffset = -geometry.size.width
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    onSwipeComplete(.left)
-                                    isDragging = false
-                                }
-                            } else if value.translation.width > threshold {
-                                // Свайп вправо - предыдущая неделя
-                                dragOffset = geometry.size.width
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    onSwipeComplete(.right)
-                                    isDragging = false
-                                }
-                            } else {
-                                // Возвращаем на место
-                                dragOffset = 0
-                                isDragging = false
-                            }
-                        }
-                    }
-            )
-        }
-    }
-}
-
-// Ряд с днями недели
-struct WeekRowView: View {
-    let weekDays: [Date]
-    @Binding var selectedDate: Date
-    let hasWorkout: (Date) -> Bool
-    let dayWidth: CGFloat
-    let offset: CGFloat
-    
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(weekDays.enumerated()), id: \.element) { index, date in
-                DayCell(
-                    date: date,
-                    isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
-                    isToday: Calendar.current.isDateInToday(date),
-                    hasWorkout: hasWorkout(date),
-                    width: dayWidth
-                )
-                .onTapGesture {
-                    withAnimation {
-                        selectedDate = date
-                    }
-                }
-            }
-        }
-        .offset(x: offset)
-    }
-}
-
-// Ячейка дня с фиксированной шириной
-struct DayCell: View {
-    let date: Date
-    let isSelected: Bool
-    let isToday: Bool
-    let hasWorkout: Bool
-    let width: CGFloat
-    
-    private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "d"
-        return formatter
-    }()
-    
-    private let weekdayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "E"
-        return formatter
-    }()
-    
-    var body: some View {
-        VStack(spacing: 6) {
-            // День недели (Пн, Вт и т.д.)
-            Text(weekdayFormatter.string(from: date).uppercased())
-                .font(.caption2)
-                .fontWeight(.medium)
-                .foregroundColor(isSelected ? .white : (isToday ? .blue : .gray))
-            
-            // Число
-            Text(dateFormatter.string(from: date))
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(isSelected ? .white : (isToday ? .blue : .primary))
-            
-            // Индикатор тренировки
-            if hasWorkout {
-                Circle()
-                    .fill(isSelected ? .white : .green)
-                    .frame(width: 6, height: 6)
-            } else {
-                Circle()
-                    .fill(Color.clear)
-                    .frame(width: 6, height: 6)
-            }
-        }
-        .frame(width: width, height: 70)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isSelected ? Color.blue : Color.clear)
-                .opacity(isSelected ? 0.8 : (isToday ? 0.1 : 0))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isToday ? Color.blue : Color.clear, lineWidth: 1)
-        )
-    }
-}
-
-// Пустое состояние
-struct EmptyStateView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: "dumbbell")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            Text("Нет тренировок")
-                .font(.title2)
-                .foregroundColor(.gray)
-            Text("Нажмите + чтобы добавить")
-                .font(.caption)
-                .foregroundColor(.gray)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// Список тренировок
-struct WorkoutListView: View {
-    let workouts: [Workout]
-    let dataManager: DataManager
-    let onEdit: (Workout) -> Void
-    let deleteWorkout: (Workout) -> Void
-    
-    var body: some View {
-        List {
-            ForEach(workouts) { workout in
-                NavigationLink {
-                    WorkoutDetailView(workout: workout, dataManager: dataManager)
-                } label: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // Название тренировки
-                        Text(workout.name)
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        // Средняя строка: счетчик слева, время по центру
-                        HStack {
-                            // Синий счетчик упражнений слева
-                            Label("\(workout.exercises.count) упражнений", systemImage: "figure.strengthtraining.traditional")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.2))
-                                .cornerRadius(8)
-                            
-                            Spacer()
-                            
-                            // Время по центру
-                            Text(workout.formattedTime)
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                            
-                            Spacer()
-                            
-                            // Зеленая заметка справа (если есть)
-                            if !workout.notes.isEmpty {
-                                Label("Заметка", systemImage: "note.text")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.green.opacity(0.2))
-                                    .cornerRadius(8)
-                            } else {
-                                // Невидимый заполнитель для баланса
-                                Color.clear
-                                    .frame(width: 1, height: 1)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .contextMenu {
-                    // Кнопка редактирования
-                    Button(action: {
-                        onEdit(workout)
-                    }) {
-                        Label("Редактировать", systemImage: "pencil")
-                    }
-                    
-                    // Кнопка удаления
-                    Button(role: .destructive) {
-                        deleteWorkout(workout)
-                    } label: {
-                        Label("Удалить", systemImage: "trash")
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
     }
 }
