@@ -28,3 +28,5 @@ Views/
 **/Views/
 **/App/
 **/Helpers/
+Config.xcconfig
+Secrets.swift
